@@ -1,17 +1,185 @@
 import os
 import sys
-saldo = float(0)
-contagem_de_saques = 0
-extrato_lista = []
-global usuarios, contas
-usuarios = [{"nome": "Andrey Henrique", "data de nascimento": "14/01/2005", "cpf": "00000000001", "endereço":"Fortaleza"}]
-contas = []
+from abc import ABC, abstractclassmethod, abstractproperty
 
+class Cliente():
+  def __init__(self, endereco):
+    self.endereco = endereco
+    self.contas = []
+
+  def adicionar_conta(self, conta):
+    self.contas.append(conta)
+
+  def ver_contas_cliente(self):
+    for i, conta in enumerate(self.contas, 1):
+      print(f"\nConta: {i}")
+      print(f"  Saldo: {conta.saldo}")
+      print(f"  Número: {conta.numero}")
+      print(f"  Agência: {conta.agencia}")
+      print("-" * 30)
+
+class PessoaFisica(Cliente):
+  def __init__(self, cpf, nome, data_nascimento, endereco):
+    super().__init__(endereco)
+    self.cpf = cpf
+    self.nome = nome
+    self.data_nascimento = data_nascimento
+
+class Conta():
+
+  def __init__(self, numero, cliente, saldo):
+    self._saldo = saldo
+    self._numero = numero
+    self._agencia = "0001"
+    self._cliente = cliente
+    self._historico = Historico()
+
+  @property
+  def saldo(self):
+    return self._saldo
+
+  @property
+  def numero(self):
+    return self._numero
+
+  @property
+  def agencia(self):
+    return self._agencia
+
+  @property
+  def cliente(self):
+    return self._cliente
+
+  @property
+  def historico(self):
+    return self._historico
+
+  def sacar(self, valor):
+    valor = float(valor)
+    if self._saldo >= valor and self._saldo > 0:
+        self._saldo -= valor
+        print("A operação foi um sucesso!")
+        input("\nAperte enter para voltar ao menu.")
+        return True
+
+    print("A operação foi um fracasso!")
+    input("\nAperte enter para voltar ao menu.")
+    return False
+
+  def depositar(self, valor):
+    valor = float(valor)
+    if valor > 0:
+        self._saldo += valor
+        print("A operação foi um sucesso!")
+        input("\nAperte enter para voltar ao menu.")
+        return True
+
+    print("A operação foi um fracasso!")
+    input("\nAperte enter para voltar ao menu.")
+    return False
+
+class ContaCorrente(Conta):
+    def __init__(self, numero, cliente, saldo, limite = 500, limite_saques = 3):
+      super().__init__(numero, cliente, saldo)
+      self.limite = limite
+      self.limite_saques = limite_saques
+
+    @classmethod
+    def nova_conta(cls, cliente, numero_da_conta, saldo):
+      nova_conta = cls(numero_da_conta, cliente, saldo)
+      cliente.adicionar_conta(nova_conta)
+      return nova_conta
+    
+    def sacar(self, valor):
+      valor = float(valor)
+      numero_de_saques = sum(1 for transacao in self.historico.transacoes if transacao.tipo == "Saque")
+
+      excedeu_limite = valor > self.limite
+
+      excedeu_saque = numero_de_saques + 1 > self.limite_saques
+
+      if not excedeu_limite:
+        if not excedeu_saque:
+          return super().sacar(valor=valor)
+        else:
+          print("Você excedeu o limite de saques.")
+          input("Aperte enter para voltar ao menu.")
+      else:
+        print("Você excedeu o limite do saque.")
+        input("Aperte enter para voltar ao menu.")
+      return False
+
+class Historico():
+    def __init__(self):
+      self._transacoes = []
+
+    @property
+    def transacoes(self):
+      return self._transacoes
+
+    def adicionar_transacao(self, operacao):  
+      self._transacoes.append(operacao)
+
+    def ver_extrato(self):
+      apaga_terminal()
+      for i, operacao in enumerate(self._transacoes, 1):
+        print(f"Operação {i}:")
+        print(f"  Tipo: {operacao.tipo}")
+        print(f"  Valor: {operacao.valor}")
+        print(f"  Numero da Conta: {operacao.numero_da_conta}")
+        print(f"  Nome do Cliente: {operacao.nome_do_cliente}")
+        print("-" * 30)
+
+class Transacao(ABC):
+  @property
+  @abstractproperty
+  def valor(self):
+      pass
+
+  @abstractclassmethod
+  def registrar(self, conta):
+      pass
+
+class Depositar(Transacao):
+  def __init__(self, valor):
+    self._valor = valor
+
+  @property
+  def valor(self):
+    return self._valor
+  
+  def registrar(self, conta):
+    if conta.depositar(self._valor):
+      historico = conta._historico
+      operacao = Operacao(tipo="Depósito", valor=self._valor, numero_da_conta=conta.numero, nome_do_cliente=conta._cliente.nome)
+      historico.adicionar_transacao(operacao)
+
+class Sacar(Transacao):
+  def __init__(self, valor):
+    self._valor = valor
+
+  @property
+  def valor(self):
+    return self._valor
+  
+  def registrar(self, conta):
+    
+    if conta.sacar(valor=self._valor):
+      historico = conta._historico
+      operacao = Operacao(tipo="Saque", valor=self._valor, numero_da_conta=conta.numero, nome_do_cliente=conta._cliente.nome)
+      historico.adicionar_transacao(operacao)
+
+class Operacao():
+  def __init__(self, tipo, valor, numero_da_conta, nome_do_cliente):
+    self.tipo = tipo
+    self.valor = valor
+    self.numero_da_conta = numero_da_conta
+    self.nome_do_cliente = nome_do_cliente
 
 def apaga_terminal():
   if sys.platform.startswith("win"):
     os.system("cls")
-  else: 
+  else:
     os.system("clear")
 
 def is_simple_number(value):
@@ -23,186 +191,222 @@ def is_simple_number(value):
          return False
     return True
 
-def verifica_cpf(cpf_formatado, lista):
-  for usuario in lista:
-    if usuario["cpf"] == cpf_formatado:
-      return True 
-  return False
+def encontra_cpf(clientes, cpf):
+  for cliente in clientes:
+    if cliente.cpf == cpf:
+      return cliente
+  return None
 
-def deposito(saldo, contagem_de_saques, extrato_lista, /):
-  apaga_terminal()
-  while True:
-    valor = ( input("digite o valor que você deseja depositar, ou digite (v) para voltar ao menu: "))
-    if valor =="v":
-      print()
-      break
-    else:
-      if is_simple_number(valor):
-        valor = float(valor)
-        if valor <= 0:
-          print()
-          print("A entrada de dados é irreconhecida. Por favor, tente novamente ou digite (v) para voltar ao menu.")
-          print()
-        elif valor > 0:
-          extrato_lista.append(f"Depósito: R${valor}")
-          saldo = saldo + valor
-          print(f"Seu saldo agora é de R${saldo}.")
-          print()
-          print("Pressione enter para voltar ao menu.")
-          input()
-          break
-      else:
-        print("A entrada de dados é irreconhecida. Por favor, tente novamente.")
-  menu(saldo, contagem_de_saques, extrato_lista)
-
-def saque(*, saldo, contagem_de_saques, extrato_lista):
-  apaga_terminal()
-  if contagem_de_saques >= 3:
-    print("Você atingiu o limite de saques diário, tente novamente mais tarde.")
-  else:
-    print(f"Seu saldo é de: R${saldo}.")
-    while True:
-      print()
-      valor = input("Digite o valor que deseja sacar, ou digite (v) para voltar ao menu: ")
-      if valor == "v":
-        print()
-        break
-      else:
-        valor = float(valor)
-        if valor <= 0:
-          print("O valor é invalído.")
-        elif valor > saldo:
-          print("O valor que você deseja sacar é maior que o saldo que você tem em conta. Por favor tente novamente.")
-        elif valor > 500:
-          print("O valor que você deseja sacar é maior que o limite por saque. por favor tente novamente.")
-        else:
-          extrato_lista.append(f"Saque: R${valor}")
-          saldo = saldo - valor
-          print()
-          print(f"Seu saque foi realizado com sucesso, seu saldo agora é de: R${saldo}.")
-          contagem_de_saques += 1
-          print()
-          print("presione enter  para voltar ao menu.")
-          input()
-          break
-  menu(saldo, contagem_de_saques, extrato_lista)
-
-def extrato(saldo, /, *, extrato_lista, contagem_de_saques):
-  apaga_terminal()
-  print("="*14, "EXTRATO", "="*13)
-  print()
-  if not extrato_lista:
-    print("Não houveram movimentações financeiras na sua conta.")
-  else:
-    for elemento in extrato_lista:
-      print(f"{elemento}")
-  print()
-  print(f"Seu saldo é de R$: {saldo}.")
-  print()
-  print("="*18 + "="*18)
-  print("\n Pressione enter para voltar ao menu.\n")
-  input()
-  menu(saldo, contagem_de_saques, extrato_lista)
-
-# Cliente do Banco
-def criar_usuario(saldo, contagem_de_saques, extrato_lista):
-  apaga_terminal()
-  while True:
-    cpf = input("Digite seu CPF, ou aperte (v) para retornar: ")
-    if cpf == "v":
-      menu(saldo, contagem_de_saques, extrato_lista)
-    else:
-      cpf_formatado = ""
-      for char in cpf:
-        if char.isdigit():
-          cpf_formatado += char
-
-      if verifica_cpf(cpf_formatado, usuarios):
-        print("Esse CPF já está cadastrado no sistema.")
-        input("\nAperte enter para voltar ao menu.")
-        menu(saldo, contagem_de_saques, extrato_lista) 
-      elif len(cpf_formatado) < 11 or len(cpf_formatado) > 11:
-          print("\nO CPF que você digitou é invalído.")
-          print()
-      else:
-        nome = input("Digite seu nome completo: ")
-        data_nascimento = input("Digite sua data de nascimento (dd/mm/yyyy): ")
-        endereço = input("Digite seu endereço (logradouro - n - bairro - cidade/Sigla estado): ")
-        usuarios.append({"nome": nome, "data de nascimento": data_nascimento,"cpf": cpf_formatado, "endereço": endereço})
-        print("\nUsuário cadastrado com sucesso.")
-        input("\nAperte enter para voltar ao menu.")
-        menu(saldo, contagem_de_saques, extrato_lista) 
-
-# Vincular com o Usuario
-def criar_conta_corrente(saldo, contagem_de_saques, extrato_lista):
-  apaga_terminal()
-
-  if len(usuarios) == 0:
-    print("Não existem usuários cadastrados no sistema.")
-    input("\nAperte enter para voltar ao menu.")
-    menu(saldo, contagem_de_saques, extrato_lista)
-
-  else:
-    while True:
-      usuario_cpf = input("Digite o CPF do usuário que deseja conectar a esta conta corrente ou aperte (v) para voltar ao menu: ")
-      if usuario_cpf == "v":
-        menu(saldo, contagem_de_saques, extrato_lista)
-      else:
-        usuario_cpf_formatado = ""
-        for char in usuario_cpf:
-          if char.isdigit():
-            usuario_cpf_formatado += char
-
-        if not verifica_cpf(usuario_cpf_formatado, usuarios):
-          print("Não foi encontrado nenhum CPF correspondente, por favor tente novamente.")
-        else:
-          agencia = "0001"
-          n_conta = (len(contas) + 1)
-          contas.append({"Agência": agencia, "Número da conta": n_conta, "Usuário": usuario_cpf_formatado})
-          print("\nSua conta foi criada com sucesso.")
-          input("\nAperte enter para voltar ao menu.")
-          menu(saldo, contagem_de_saques, extrato_lista)
-
-def listar_contas():  
-  print()
-
-def menu(saldo, contagem_de_saques, extrato_lista):
+def menu():
   apaga_terminal()
   print("="*15, "MENU", "="*15)
   print("""
-      d - Depositar
-      s - Sacar
-      e - Extrato
-      u - Criar novo usuário
-      c - Criar nova conta corrente
+      c - Contas
+      o - Operações
+
       v - Sair
        """)
   print("="*18 + "="*18)
 
-  while True:
-    caminho = input("=> ")
-    if caminho == "d":
-      deposito(saldo, contagem_de_saques, extrato_lista)
-    elif caminho == "s":
-      saque(saldo=saldo, contagem_de_saques=contagem_de_saques, extrato_lista=extrato_lista)
-    elif caminho == "e":
-      extrato(saldo, contagem_de_saques=contagem_de_saques, extrato_lista=extrato_lista)
-    elif caminho == "u":
-      criar_usuario(saldo, contagem_de_saques, extrato_lista)
-    elif caminho == "c":
-      criar_conta_corrente(saldo, contagem_de_saques, extrato_lista)
-    elif caminho == "v":
-      apaga_terminal()
-      print()
-      print("Obrigado por utilizar nossos sistemas, volte sempre!")
-      print()
-      sys.exit()
-      break
+def menu_contas():
+  apaga_terminal()
+  print("="*15, "MENU", "="*15)
+  print("""
+      cl - Adicionar cliente
+      vc - Ver Clientes
+      cc - Criar Conta
+      cv - Ver Contas
+
+      v  - voltar
+       """)
+  print("="*18 + "="*18)
+
+def menu_operacoes():
+  apaga_terminal()
+  print("="*15, "MENU", "="*15)
+  print("""
+      d  - Depositar
+      s  - Sacar
+      e  - Extrato
+        
+      v  - voltar
+       """)
+  print("="*18 + "="*18)
+
+def cria_cliente(clientes):
+    cpf = input("Digite seu CPF: ")
+    nome = input("Digite seu nome: ")
+    data_nascimento = input("Digite sua data de nascimento: ")
+    endereco = input("Digite seu endereço: ")
+    cliente = PessoaFisica(cpf, nome, data_nascimento, endereco)
+    clientes.append(cliente)
+    print("Cliente adicionado com sucesso!")
+    input("\nAperte enter para voltar ao menu.")
+    return clientes
+
+def ver_clientes(clientes):
+    if len(clientes) == 0:
+        print("Não foram criadas contas.")
     else:
-      print()
+        for i, cliente in enumerate(clientes, 1):
+            print(f"Cliente {i}:")
+            print(f"  Nome: {cliente.nome}")
+            print(f"  CPF: {cliente.cpf}")
+            print(f"  Data de Nascimento: {cliente.data_nascimento}")
+            print(f"  Endereço: {cliente.endereco}")
+            print("-" * 30)
+
+    input("\nAperte enter para voltar ao menu.")
+
+def cria_conta(clientes):
+  if len(clientes) == 0:
+    print("Não existem clientes cadastrados.")
+    input("\nAperte enter para voltar ao menu.")
+  else:
+    cpf = input("Digite o cpf do cliente que quer criar a conta: ")
+    cliente = encontra_cpf(clientes, cpf)
+    if cliente:
+      numero_da_conta = len(cliente.contas) + 1
+      ContaCorrente.nova_conta(cliente=cliente, numero_da_conta=numero_da_conta, saldo=0)
+      print("\nConta Criada com Sucesso!")
+      input("\nAperte enter para voltar ao menu.")
+    else:
+      print("O CPF digitado não está cadastrado no sistema.")
+      input("\nAperte enter para voltar ao menu.")
+
+def ver_contas(clientes):
+  cpf = input("Digite o cpf do cliente que deseja ver as contas: ")
+  cliente = encontra_cpf(clientes, cpf)
+  if cliente:
+    if len(cliente.contas) == 0:
+      print("O cliente não tem contas.")
+      input("\nAperte enter para voltar ao menu.")
+    else:
+      cliente.ver_contas_cliente()
+      input("\nAperte enter para voltar ao menu.")
+  else:
+    print("O CPF digitado não está cadastrado no sistema.")
+    input("\nAperte enter para voltar ao menu.")
+
+def depositar(clientes):
+  if len(clientes) == 0:
+    print("Não existem clientes cadastrados.")
+    input("\nAperte enter para voltar ao menu.")
+  else:
+    cpf = input("Digite o cpf do cliente que deseja fazer a transação: ")
+    cliente = encontra_cpf(clientes, cpf)
+    if cliente:
+      if len(cliente.contas) == 0:
+        print("Não existem contas cadastradas.")
+        input("\nAperte enter para voltar ao menu.")
+      else:
+        conta = cliente.contas[0]
+        valor = input("\nDigite o valor que deseja depositar: ")
+        deposito = Depositar(valor)
+        deposito.registrar(conta=conta)
+    else:
+      print("O CPF digitado não está cadastrado no sistema.")
+      input("\nAperte enter para voltar ao menu.")
+
+def sacar(clientes):
+  if len(clientes) == 0:
+    print("Não existem clientes cadastrados.")
+    input("\nAperte enter para voltar ao menu.")
+  else:
+    cpf = input("Digite o cpf do cliente que deseja fazer a transação: ")
+    cliente = encontra_cpf(clientes, cpf)
+    if cliente:
+      if len(cliente.contas) == 0:
+        print("Não existem contas cadastradas.")
+        input("\nAperte enter para voltar ao menu.")
+      else:
+        conta = cliente.contas[0]
+        valor = input("\nDigite o valor que deseja sacar: ")
+        saque = Sacar(valor)
+        saque.registrar(conta=conta)
+    else:
+      print("O CPF digitado não está cadastrado no sistema.")
+      input("\nAperte enter para voltar ao menu.")
+
+def extrato(clientes):
+  if len(clientes) == 0:
+    print("Não existem clientes cadastrados.")
+    input("\nAperte enter para voltar ao menu.")
+  else:
+    cpf = input("Digite o cpf do cliente que deseja fazer a transação: ")
+    cliente = encontra_cpf(clientes, cpf)
+    if cliente:
+      if len(cliente.contas) == 0:
+        print("Não existem contas cadastradas.")
+        input("\nAperte enter para voltar ao menu.")
+      else:
+        conta = cliente.contas[0]
+        historico = conta._historico
+        historico.ver_extrato()
+        input("\nAperte enter para voltar ao menu.")
+    else:
+      print("O CPF digitado não está cadastrado no sistema.")
+      input("\nAperte enter para voltar ao menu.")
+
+def main():
+  andrey = PessoaFisica("0", "Andrey Henrique de Abreu Carneiro", "14/01/2005", "Rua perdigão de Oliveira, 832")
+  clientes = [andrey]
+  conta_do_andrey = ContaCorrente(numero=0, saldo=1000, cliente=andrey)
+  andrey.adicionar_conta(conta_do_andrey)
+
+  while True:
+    menu()
+    caminho = input("=> ")
+
+    if caminho.lower() == "c":
+
+      while True:
+        menu_contas()
+        caminho = input("=> ")
+
+        if caminho.lower() == "cl":
+          cria_cliente(clientes)
+          break
+        elif caminho.lower() == "vc":
+          ver_clientes(clientes)
+          break
+        elif caminho.lower() == "cc":
+          cria_conta(clientes)
+          break
+        elif caminho.lower() == "cv":
+          ver_contas(clientes)
+          break
+        elif caminho.lower() == "v":
+            break
+        else:
+            print("\nA entrada de dados é irreconhecida. Por favor, tente novamente.")
+            input("\n Aperte enter para voltar ao menu.")
+
+    elif caminho.lower() == "o":
+      while True:
+        menu_operacoes()
+        caminho = input("=> ")
+
+        if caminho.lower() == "d":
+          depositar(clientes)
+          break
+        elif caminho.lower() == "s":
+          sacar(clientes)
+          break
+        elif caminho.lower() == "e":
+          extrato(clientes)
+          break
+        elif caminho.lower() == "v":
+            break
+        else:
+            print("\nA entrada de dados é irreconhecida. Por favor, tente novamente.")
+            input("\n Aperte enter para voltar ao menu.")
+
+    elif caminho.lower() == "v":
+      print("\nObrigado por utilizar nossos sistemas, volte sempre!")
+      break
+
+    else:
       print("A entrada de dados é irreconhecida. Por favor, tente novamente.")
-      print()
 
-
-
-menu(saldo, contagem_de_saques, extrato_lista)
+main()
